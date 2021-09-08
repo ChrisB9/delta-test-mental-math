@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Determine Equation Signs</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-F3w7mX95PdgyTmZZMECAngseQB83DfGTowi0iMjiWaeVhAn4FJkqJByhZMI3AhiU" crossorigin="anonymous">
+    <script src="https://unpkg.com/vue@next"></script>
+    <script>
+        function randomIntFromInterval(min, max) {
+            return Math.floor(Math.random() * (max - min + 1) + min);
+        }
+
+        function randomSymbolSelector() {
+            const n = randomIntFromInterval(0, 100);
+            switch (true) {
+                case n < 20:
+                    return '+';
+                case n < 50:
+                    return '*';
+                case n < 70:
+                    return '-';
+            }
+            return '/'
+        }
+
+        function generateNew(element) {
+            let amountArray = [randomIntFromInterval(2, 7), randomIntFromInterval(4, 7), randomIntFromInterval(6, 8)];
+            let amount = amountArray[randomIntFromInterval(0, 2)];
+            element.numbers = [];
+            element.selected = [];
+            element.symbols = [];
+            const limit = randomIntFromInterval(10, 200);
+            for (let i = 0; i < amount; i++) {
+                element.numbers[i] = randomIntFromInterval(1, limit);
+            }
+            for (let i = 0; i < (amount - 1); i++) {
+                element.symbols[i] = randomSymbolSelector();
+                element.selected[i] = '';
+            }
+
+            const [a, result] = calculate(element.numbers, element.symbols);
+
+            if (amount !== element.amount && a % 1 === 0 && a >= 0 && a < randomIntFromInterval(50, 1000)) {
+                element.amount = amount;
+                element.result = a;
+                element.equation = result.join(' ') + ' = ' + a;
+                element.log[element.equation] = {tries: 0, time: -Date.now()};
+                element.timerRunning = true;
+            } else {
+                generateNew(element);
+            }
+        }
+
+        function calculate(numbers, symbols) {
+            let result = [];
+            let index = 0;
+            result.push(numbers[index]);
+            for (let symbol of symbols) {
+                result.push(symbol);
+                index += 1;
+                result.push(numbers[index]);
+            }
+            let a = eval(result.join(''));
+            return [a, result];
+        }
+
+        const MathForm = {
+            data() {
+                return {
+                    numbers: [],
+                    symbols: [],
+                    selected: [],
+                    equation: '',
+                    result: '',
+                    amount: '',
+                    correct: 0,
+                    wrong: 0,
+                    locked: false,
+                    correctStyle: '',
+                    wrongStyle: '',
+                    buttonGroupClass: 'btn-group',
+                    ro: null,
+                    log: {},
+                    showLog: false,
+                    timerRunning: false,
+                    elapsedTime: 0,
+                };
+            },
+
+            mounted() {
+                generateNew(this);
+                this.ro = new ResizeObserver(this.onResize).observe(this.$refs.buttonGroup);
+            },
+
+            watch: {
+                timerRunning: {
+                    handler(value) {
+                        if (value) {
+                            setTimeout(() => {
+                                this.elapsedTime = this.log[this.equation].time + Date.now();
+                            }, 1000);
+                        } else {
+                            this.elapsedTime = 0;
+                        }
+                    },
+                    immediate: true,
+                },
+                elapsedTime: {
+                    handler(value) {
+                        if (value > 0 && this.timerRunning) {
+                            setTimeout(() => {
+                                this.elapsedTime = this.log[this.equation].time + Date.now();
+                            }, 1000);
+                        }
+                    },
+                    immediate: true,
+                }
+            },
+
+            methods: {
+                checkResults() {
+                    this.log[this.equation].tries++;
+                    const [a] = calculate(this.numbers, this.selected);
+                    if (a === this.result) {
+                        if (!this.locked) {
+                            this.correct++;
+                        }
+                        this.locked = false;
+                        this.log[this.equation].time += Date.now();
+                        generateNew(this);
+                    } else if (!this.locked) {
+                        this.wrong++;
+                        this.locked = true;
+                    }
+                    this.updateProgressBar();
+                },
+
+                skip() {
+                    this.log[this.equation].tries++;
+                    this.log[this.equation].skipped = true;
+                    this.wrong++;
+                    this.locked = false;
+                    this.log[this.equation].time += Date.now();
+                    generateNew(this);
+                    this.updateProgressBar();
+                },
+
+                updateProgressBar() {
+                    const sum = this.correct + this.wrong;
+                    if (this.correct === 0) {
+                        this.correctStyle = 'width: 0%';
+                    } else {
+                        const correct = (this.correct / sum * 100);
+                        this.correctStyle = `width: ${correct}%`;
+                    }
+                    if (this.wrong === 0) {
+                        this.wrongStyle = 'width: 0%';
+                    } else {
+                        const wrong = (this.wrong / sum * 100);
+                        this.wrongStyle = `width: ${wrong}%`;
+                    }
+                },
+
+                onResize() {
+                    if (this.$refs.buttonGroup.offsetWidth < 450) {
+                        this.buttonGroupClass = 'btn-group-vertical';
+                    } else {
+                        this.buttonGroupClass = 'btn-group';
+                    }
+                },
+
+                readableElapsedTime() {
+                    const time = Math.floor(this.elapsedTime / 1000);
+                    const minutes = Math.floor(time / 60);
+                    const seconds = time - (minutes * 60);
+                    const printedMinutes = minutes < 10 ? '0' + minutes : minutes;
+                    const printedSeconds = seconds < 10 ? '0' + seconds : seconds;
+                    return `${printedMinutes}:${printedSeconds}`;
+                }
+            },
+
+            beforeDestroy() {
+                this.ro.unobserve(this.$refs.buttonGroup);
+            },
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            Vue.createApp(MathForm).mount('#form');
+        });
+    </script>
+</head>
+<body>
+<div id="form" class="container my-2">
+    <div class="row">
+        <h1 class="text-center">Determine Equation Symbols</h1>
+        <h3 class="text-center">A Delta-Test Task</h3>
+    </div>
+    <br/>
+    <div class="row">
+        <span class="text-end">{{ readableElapsedTime() }} ||| Correct: {{ correct }} - Wrong: {{ wrong }}</span>
+    </div>
+    <div class="progress">
+        <div class="progress-bar progress-bar-striped bg-success" role="progressbar" :style="correctStyle"></div>
+        <div class="progress-bar progress-bar-striped bg-danger" role="progressbar" :style="wrongStyle"></div>
+    </div>
+    <br/>
+    <div class="row">
+        <div ref="buttonGroup" :class="buttonGroupClass">
+            <template v-for="(n,index) in symbols" :key="index">
+                <div class="btn btn-lg btn-light" v-if="index === 0">{{ numbers[index] }}</div>
+                <select class="form-select" :style="buttonGroupClass.includes('vertical') ? '' : 'width:auto;'"
+                        v-model="selected[index]" :data-value="symbols[index]">
+                    <option value="" disabled>#</option>
+                    <option>+</option>
+                    <option>-</option>
+                    <option>*</option>
+                    <option>/</option>
+                </select>
+                <div class="btn btn-lg btn-light">{{ numbers[index + 1] }}</div>
+            </template>
+            <div class="btn btn-lg btn-light">=&nbsp;{{ result }}</div>
+            <button class="btn" :class="!locked ? 'btn-dark' : 'btn-danger'" v-on:click="checkResults">Check</button>
+        </div>
+    </div>
+    <br/>
+    <br/>
+    <br/>
+    <br/>
+    <div>
+        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+            <button class="btn btn-primary me-md-2" type="button" @click="skip">Skip</button>
+            <button class="btn btn-primary" type="button" @click="showLog = !showLog">Show Log</button>
+        </div>
+    </div>
+    <br />
+    <br />
+    <br />
+    <div class="row" v-if="showLog">
+        <ul class="list-group">
+            <template v-for="(item,key) in log">
+                <li v-if="key !== equation" class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{ item.skipped ? 'Skipped: ' : '' }}{{ key }}</span>
+                    <div>
+                        <span class="badge rounded-pill" :class="item.tries === 1 && !item.skipped ? 'bg-success' : 'bg-danger'">{{ item.tries }}</span>
+                        <i style="font-size: 9px">&nbsp; in {{ item.time / 1000 }}s</i>
+                    </div>
+                </li>
+            </template>
+        </ul>
+    </div>
+</div>
+</body>
+</html>
